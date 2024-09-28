@@ -1,0 +1,119 @@
+1. Client-Side Code
+The main parts of the solution will involve:
+
+Establishing a WebSocket connection.
+Listening for data updates from the server.
+Updating the chart with new data.
+Aggregating duplicated data.
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Stock Price Graph</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h2>Real-Time Stock Price</h2>
+    <canvas id="stockChart" width="400" height="200"></canvas>
+
+    <script>
+        // Initialize WebSocket connection to the server
+        const socket = new WebSocket('ws://your-server-url');
+
+        // Initialize the chart
+        const ctx = document.getElementById('stockChart').getContext('2d');
+        const stockChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [], // Timestamp will be added here
+                datasets: [{
+                    label: 'Top Ask Price',
+                    data: [], // Top Ask Price will be added here
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1,
+                    fill: false
+                }]
+            },
+            options: {
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'second'
+                        }
+                    },
+                    y: {
+                        beginAtZero: false,
+                        title: {
+                            display: true,
+                            text: 'Top Ask Price'
+                        }
+                    }
+                }
+            }
+        });
+
+        // Store the last received data point to avoid duplication
+        let lastReceivedTimestamp = null;
+
+        // Handle incoming WebSocket messages
+        socket.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            const timestamp = new Date(data.timestamp);
+            const topAskPrice = data.top_ask_price;
+
+            // Check for duplicated data based on the timestamp
+            if (lastReceivedTimestamp !== timestamp.getTime()) {
+                lastReceivedTimestamp = timestamp.getTime();
+
+                // Add new data point to the chart
+                stockChart.data.labels.push(timestamp);
+                stockChart.data.datasets[0].data.push(topAskPrice);
+
+                // Update the chart with the new data
+                stockChart.update();
+            }
+        };
+
+        // Handle WebSocket errors
+        socket.onerror = function(error) {
+            console.error('WebSocket Error: ', error);
+        };
+
+        // Handle WebSocket connection closure
+        socket.onclose = function(event) {
+            console.log('WebSocket connection closed: ', event);
+        };
+    </script>
+</body>
+</html>
+
+2. Server-Side (Node.js Example)
+The server should stream stock data in real-time using WebSockets.
+const WebSocket = require('ws');
+const wss = new WebSocket.Server({ port: 8080 });
+
+// Example function to simulate stock data generation
+function generateStockData() {
+    return {
+        timestamp: new Date().toISOString(),
+        top_ask_price: (Math.random() * 1000).toFixed(2) // Random price for demonstration
+    };
+}
+
+// Broadcast stock data to all connected clients
+function broadcastStockData() {
+    const stockData = generateStockData();
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(stockData));
+        }
+    });
+}
+
+// Send stock data every 2 seconds
+setInterval(broadcastStockData, 2000);
+
+console.log('Server is running on ws://localhost:8080');
